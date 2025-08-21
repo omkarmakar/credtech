@@ -345,4 +345,4 @@ if __name__ == "__main__":
     
     # Save model
     model.save_model('models/credit_model.joblib')
-    print("\\nModel saved successfully!"
+    print("\\nModel saved successfully!")
