@@ -254,13 +254,6 @@ credtech-mvp/
 4. **Robust engineering** with error handling and fallbacks
 5. **Business relevance** with actionable credit insights
 
-## 📞 Support & Contact
-
-**Built for CredTech Hackathon 2025**
-- Organized by: The Programming Club, IITK
-- Powered by: Deep Root Investments
-- Submission Deadline: 23:59 IST, August 22, 2025
-
 **Need Help?**
 - Check the troubleshooting section above
 - Review the code comments for implementation details
