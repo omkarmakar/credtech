@@ -8,18 +8,14 @@
 
 ```bash
 # 1. Clone and setup
-git clone <your-repo-url>
+git clone https://github.com/omkarmakar/credtech.git
 cd credtech-mvp
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
-# OR: venv\Scripts\activate  # Windows
+OR: venv\Scripts\activate  # Windows
 
 # 2. Install dependencies
 pip install -r requirements.txt
-
-# 3. Set up environment variables
-cp .env.example .env
-# Add your API keys to .env file
 
 # 4. Run the application
 streamlit run app.py
