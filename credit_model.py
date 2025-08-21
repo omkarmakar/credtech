@@ -10,6 +10,7 @@ import shap
 from typing import Dict, Tuple, List
 import logging
 import os
+import warnings  # Added missing import
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -87,7 +88,9 @@ class CreditScoringModel:
         
         return X, y
     
-    def train(self, X: pd.DataFrame = None, y: pd.Series = None) -> Dict:
+    from typing import Optional
+
+    def train(self, X: Optional[pd.DataFrame] = None, y: Optional[pd.Series] = None) -> Dict:
         """Train the credit scoring model"""
         if X is None or y is None:
             logger.info("Generating synthetic training data...")
@@ -135,7 +138,7 @@ class CreditScoringModel:
         
         # Initialize SHAP explainer
         try:
-            self.shap_explainer = shap.Explainer(self.model, X_train_scaled)
+            self.shap_explainer = shap.TreeExplainer(self.model)  # Use TreeExplainer for XGBoost
             logger.info("SHAP explainer initialized successfully")
         except Exception as e:
             logger.warning(f"Could not initialize SHAP explainer: {e}")
@@ -149,10 +152,12 @@ class CreditScoringModel:
     
     def predict(self, X: pd.DataFrame) -> Dict:
         """Make credit risk prediction"""
-        if not self.is_trained:
-            raise ValueError("Model not trained yet. Call train() first.")
+        if not self.is_trained or self.model is None:
+            raise ValueError("Model not trained yet or model is None. Call train() first.")
         
         # Ensure all required features are present
+        if self.feature_names is None:
+            raise ValueError("Model feature names are not initialized. Train the model first.")
         for feature in self.feature_names:
             if feature not in X.columns:
                 X[feature] = 0.0  # Default value for missing features
@@ -194,6 +199,8 @@ class CreditScoringModel:
         
         try:
             # Ensure all required features are present
+            if self.feature_names is None:
+                raise ValueError("Model feature names are not initialized. Train the model first.")
             for feature in self.feature_names:
                 if feature not in X.columns:
                     X[feature] = 0.0
@@ -205,18 +212,21 @@ class CreditScoringModel:
             X_scaled = self.scaler.transform(X)
             
             # Get SHAP values
-            shap_values = self.shap_explainer(X_scaled)
-            
+            shap_values = self.shap_explainer.shap_values(self.scaler.transform(X))  # Use shap_values for TreeExplainer
+
             # Extract SHAP values for the positive class (high risk)
-            if hasattr(shap_values, 'values') and len(shap_values.values.shape) > 2:
-                # Multi-class case
-                feature_contributions = shap_values.values[0, :, 1]  # High risk class
-                base_value = shap_values.base_values[0, 1]
+            if isinstance(shap_values, list) and len(shap_values) == 2:
+                # Binary classification: shap_values[1] is for class 1
+                feature_contributions = shap_values[1][0]
+                if isinstance(self.shap_explainer.expected_value, (list, np.ndarray)) and len(self.shap_explainer.expected_value) > 1:
+                    base_value = self.shap_explainer.expected_value[1]
+                else:
+                    base_value = self.shap_explainer.expected_value
             else:
-                # Binary case
-                feature_contributions = shap_values.values[0]
-                base_value = shap_values.base_values[0]
-            
+                # Single output
+                feature_contributions = shap_values[0]
+                base_value = self.shap_explainer.expected_value
+
             # Create feature contribution dictionary
             contributions = {}
             for i, feature_name in enumerate(self.feature_names):
@@ -232,7 +242,7 @@ class CreditScoringModel:
             
             return {
                 'feature_contributions': contributions,
-                'base_value': float(base_value),
+                'base_value': float(base_value[0]) if (isinstance(base_value, (list, np.ndarray)) and base_value is not None and len(base_value) > 0 and isinstance(base_value[0], (int, float, np.floating))) else (float(base_value) if isinstance(base_value, (int, float, np.floating)) else None),
                 'top_risk_factors': positive_factors,
                 'top_protective_factors': negative_factors,
                 'explanation_summary': self._generate_explanation_summary(
@@ -316,7 +326,7 @@ class CreditScoringModel:
                 # Generate sample data for SHAP explainer initialization
                 X_sample, _ = self.generate_training_data(100)
                 X_sample_scaled = self.scaler.transform(X_sample)
-                self.shap_explainer = shap.Explainer(self.model, X_sample_scaled)
+                self.shap_explainer = shap.TreeExplainer(self.model)  # Use TreeExplainer for XGBoost
                 logger.info("SHAP explainer reinitialized")
             except Exception as e:
                 logger.warning(f"Could not reinitialize SHAP explainer: {e}")
@@ -337,12 +347,12 @@ if __name__ == "__main__":
     # Test prediction
     X_test, _ = model.generate_training_data(1)
     prediction = model.predict(X_test)
-    print(f"\\nTest Prediction: {prediction}")
+    print(f"\nTest Prediction: {prediction}")  # Fixed incorrect escaping
     
     # Test explanation
     explanation = model.explain_prediction(X_test)
-    print(f"\\nExplanation available: {'feature_contributions' in explanation}")
+    print(f"\nExplanation available: {'feature_contributions' in explanation}")  # Fixed incorrect escaping
     
     # Save model
     model.save_model('models/credit_model.joblib')
-    print("\\nModel saved successfully!")
+    print("\nModel saved successfully!")  # Fixed incorrect escaping

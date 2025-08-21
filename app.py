@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import sys
 import os
+import time
 
 # Add src directory to path
 sys.path.append('.')
@@ -165,8 +166,8 @@ def create_shap_waterfall(explanation_data):
     # Take top 10 features
     top_features = sorted_contributions[:10]
     
-    features = [item[0].replace('_', ' ').title() for item, _ in enumerate(top_features)]
-    values = [item[1] for _, item in enumerate(top_features)]
+    features = [feature.replace('_', ' ').title() for feature, value in top_features]
+    values = [value for feature, value in top_features]
     colors = ['red' if v > 0 else 'green' for v in values]
     
     fig = go.Figure(go.Bar(
@@ -209,8 +210,8 @@ def create_feature_importance_pie(explanation_data):
     if other_sum > 0:
         top_features.append(('Others', other_sum))
     
-    labels = [item[0].replace('_', ' ').title() for item, _ in enumerate(top_features)]
-    values = [item[1] for _, item in enumerate(top_features)]
+    labels = [feature.replace('_', ' ').title() for feature, value in top_features]
+    values = [value for feature, value in top_features]
     
     fig = go.Figure(data=[go.Pie(
         labels=labels,
@@ -331,7 +332,8 @@ def main():
     auto_refresh = st.sidebar.checkbox("🔄 Auto Refresh (30s)")
     if auto_refresh:
         time.sleep(30)
-        st.experimental_rerun()
+        st.rerun()
+
     
     # Main content
     if run_analysis or 'analysis_data' not in st.session_state:

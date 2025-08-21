@@ -128,8 +128,8 @@ class NewsClient:
             'positive': vader_scores['pos'],
             'negative': vader_scores['neg'],
             'neutral': vader_scores['neu'],
-            'polarity': blob.sentiment.polarity,
-            'subjectivity': blob.sentiment.subjectivity
+            'polarity': blob.polarity,
+            'subjectivity': blob.subjectivity
         }
     
     def _generate_synthetic_news(self, company_name: str) -> List[Dict]:
