@@ -14,3 +14,7 @@ alpha-vantage
 newsapi-python
 fastapi
 uvicorn
+fairlearn
+torch-geometric
+catboost
+torch
