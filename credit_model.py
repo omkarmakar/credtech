@@ -57,7 +57,7 @@ def compute_sovereign_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return metrics.fillna(0)
 
 # ---------------------------------------------------
-# 2. Black–Cox Default Probability from Merton_Model.pdf
+# 2. Black–Cox Default Probability 
 # ---------------------------------------------------
 def black_cox_pod(V, B, mu, sigma, T=1.0):
     """
