@@ -19,3 +19,4 @@ torch-geometric
 catboost
 torch
 umap
+transformers
