@@ -11,14 +11,72 @@ from sklearn.metrics import roc_auc_score
 from transformers import BertModel, BertTokenizer
 from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data as GraphData
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 from fairlearn.metrics import MetricFrame, selection_rate
+from scipy.stats import norm
+import os
 
+# ---------------------------------------------------
+# 1. Financial Metrics
+# ---------------------------------------------------
+def compute_corporate_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    metrics = pd.DataFrame(index=df.index)
 
-# Neural Network for tabular + embeddings input
+    # Cash-flow sustainability & quality
+    metrics['fcf_ni_ratio'] = df['free_cash_flow'] / df['net_income']
+    metrics['capex_depr'] = df['capex'] / df['depreciation']
+    metrics['wcc'] = df['dio'] + df['dso'] - df['dpo']
+
+    # Leverage & solvency
+    metrics['market_leverage'] = df['market_debt'] / (df['market_debt'] + df['market_equity'])
+    metrics['debt_ebitda'] = df['total_debt'] / df['ebitda']
+    metrics['coverage'] = df['ebitda'] / df['interest_expense']
+    metrics['adj_coverage'] = (df['ebitda'] - df['capex']) / df['interest_expense']
+
+    # Liquidity
+    metrics['cash_burn'] = np.maximum(0, -df['op_cf'])
+    metrics['runway'] = df['cash_eq'] / (metrics['cash_burn'].replace(0, np.nan))
+    metrics['quick_ratio'] = (df['current_assets'] - df['inventory']) / df['current_liabilities']
+
+    # Market-based signals
+    metrics['yield_spread'] = df['issuer_yield'] - df['benchmark_yield']
+    metrics['beta'] = df['beta']
+    metrics['short_interest_ratio'] = df['shares_short'] / df['avg_daily_volume']
+
+    return metrics.fillna(0)
+
+def compute_sovereign_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    metrics = pd.DataFrame(index=df.index)
+    metrics['debt_gdp'] = df['govt_debt'] / df['gdp']
+    metrics['debt_service_rev'] = (df['interest_due'] + df['principal_due']) / df['govt_rev']
+    metrics['primary_balance_gdp'] = (df['revenue'] - df['primary_expenditure']) / df['gdp']
+    metrics['ca_gdp'] = df['current_account'] / df['gdp']
+    metrics['import_cover'] = df['fx_reserves'] / df['monthly_imports']
+    metrics['extdebt_exports'] = df['external_debt'] / df['exports']
+    metrics['sovereign_spread'] = df['govt_yield'] - df['benchmark_yield']
+    return metrics.fillna(0)
+
+# ---------------------------------------------------
+# 2. Black–Cox Default Probability from Merton_Model.pdf
+# ---------------------------------------------------
+def black_cox_pod(V, B, mu, sigma, T=1.0):
+    """
+    Black-Cox Probability of Default (Structural Credit Risk).
+    """
+    A0 = np.log(V / B)
+    at = mu - (sigma**2) / 2
+    d1 = (-A0 + at * T) / (sigma * np.sqrt(T))
+    d2 = (-A0 - at * T) / (sigma * np.sqrt(T))
+
+    pod = norm.cdf(d1) + np.exp((-2 * at * A0) / (sigma**2)) * norm.cdf(d2)
+    return pod
+
+# ---------------------------------------------------
+# 3. Neural Nets and Models
+# ---------------------------------------------------
 class CreditNN(nn.Module):
-    def _init_(self, input_dim: int):
-        super(CreditNN, self)._init_()
+    def __init__(self, input_dim: int):
+        super(CreditNN, self).__init__()
         self.network = nn.Sequential(
             nn.Linear(input_dim, 128),
             nn.BatchNorm1d(128),
@@ -32,18 +90,12 @@ class CreditNN(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x, dropout_enabled=False):
-        if dropout_enabled:
-            self.network.train()  # Enable dropout during inference
-        else:
-            self.network.eval()
+    def forward(self, x):
         return self.network(x)
 
-
-# Graph Neural Network for graph embeddings
 class GNN(nn.Module):
-    def _init_(self, input_dim: int, hidden_dim: int = 64, output_dim: int = 16):
-        super(GNN, self)._init_()
+    def __init__(self, input_dim: int, hidden_dim: int = 64, output_dim: int = 16):
+        super(GNN, self).__init__()
         self.conv1 = GCNConv(input_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, output_dim)
 
@@ -53,26 +105,26 @@ class GNN(nn.Module):
         x = self.conv2(x, edge_index)
         return x
 
-
-# Dynamic risk score ANN replacing fixed coefficients
 class RiskScoreANN(nn.Module):
-    def _init_(self, n_features: int):
-        super(RiskScoreANN, self)._init_()
+    def __init__(self, n_features: int):
+        super(RiskScoreANN, self).__init__()
         self.network = nn.Sequential(
             nn.Linear(n_features, 32),
             nn.ReLU(),
             nn.Linear(32, 16),
             nn.ReLU(),
             nn.Linear(16, 1),
-            nn.Sigmoid()  # Risk score between 0 and 1
+            nn.Sigmoid()
         )
 
     def forward(self, x):
         return self.network(x)
 
-
+# ---------------------------------------------------
+# 4. Advanced Credit Scoring Model
+# ---------------------------------------------------
 class AdvancedCreditScoringModel:
-    def _init_(self):
+    def __init__(self):
         self.catboost_model = None
         self.nn_model = None
         self.gnn_model = None
@@ -83,69 +135,116 @@ class AdvancedCreditScoringModel:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.shap_explainer = None
 
+        # Text embeddings
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.bert_model = BertModel.from_pretrained('bert-base-uncased').to(self.device)
 
+    # -----------------------------------------------
+    # Data generation
+    # -----------------------------------------------
     def generate_training_data(self, n_samples=2000) -> Tuple[pd.DataFrame, pd.Series]:
-        np.random.seed(42)
-        data = {
-            'profit_margin': np.random.normal(0.08, 0.15, n_samples),
-            'roa': np.random.normal(0.05, 0.1, n_samples),
-            'roe': np.random.normal(0.12, 0.2, n_samples),
-            'pe_ratio': np.random.lognormal(2.5, 0.8, n_samples),
-            'book_value': np.random.lognormal(2.5, 1.0, n_samples),
-            'log_market_cap': np.random.normal(22, 2, n_samples),
-            'beta': np.random.normal(1.0, 0.5, n_samples),
-            'dividend_yield': np.random.exponential(0.025, n_samples),
-            'eps': np.random.normal(2.0, 5.0, n_samples),
-            'avg_sentiment': np.random.normal(0.0, 0.3, n_samples),
-            'sentiment_volatility': np.random.exponential(0.2, n_samples),
-            'news_volume': np.random.poisson(8, n_samples),
-            'positive_ratio': np.random.beta(2, 2, n_samples)
-        }
-        X = pd.DataFrame(data)
-        # No handcrafted risk score here, target uses real labels or synthetic as before
-        # Use same generation as previous for labels for backward compatibility
-        risk_score = (
-            -X['profit_margin'] * 2.0 +
-            -X['roa'] * 1.5 +
-            -X['roe'] * 1.0 +
-            np.where(X['pe_ratio'] > 30, (X['pe_ratio'] - 30) * 0.02, 0) +
-            np.where(X['pe_ratio'] < 8, (8 - X['pe_ratio']) * 0.05, 0) +
-            X['beta'] * 0.3 +
-            -X['avg_sentiment'] * 1.2 +
-            X['sentiment_volatility'] * 0.8 +
-            -X['dividend_yield'] * 5.0 +
-            np.where(X['eps'] < 0, 0.5, 0)
-        )
-        risk_score += np.random.normal(0, 0.2, n_samples)
-        threshold = np.percentile(risk_score, 70)
-        y = (risk_score > threshold).astype(int)
+        # synthetic company-level dataset
+        df = pd.DataFrame({
+            'free_cash_flow': np.random.normal(50, 20, n_samples),
+            'net_income': np.random.normal(40, 15, n_samples),
+            'capex': np.random.normal(20, 8, n_samples),
+            'depreciation': np.random.normal(15, 5, n_samples),
+            'dio': np.random.randint(30, 100, n_samples),
+            'dso': np.random.randint(20, 80, n_samples),
+            'dpo': np.random.randint(10, 50, n_samples),
+            'market_debt': np.random.normal(200, 50, n_samples),
+            'market_equity': np.random.normal(400, 100, n_samples),
+            'total_debt': np.random.normal(250, 60, n_samples),
+            'ebitda': np.random.normal(100, 30, n_samples),
+            'interest_expense': np.random.normal(10, 3, n_samples),
+            'op_cf': np.random.normal(40, 12, n_samples),
+            'cash_eq': np.random.normal(60, 20, n_samples),
+            'current_assets': np.random.normal(150, 40, n_samples),
+            'inventory': np.random.normal(50, 15, n_samples),
+            'current_liabilities': np.random.normal(100, 30, n_samples),
+            'issuer_yield': np.random.normal(5, 1, n_samples),
+            'benchmark_yield': np.random.normal(3, 0.5, n_samples),
+            'beta': np.random.normal(1, 0.3, n_samples),
+            'shares_short': np.random.randint(1000, 5000, n_samples),
+            'avg_daily_volume': np.random.randint(10000, 50000, n_samples),
+            'V': np.random.normal(1000, 200, n_samples),
+            'B': np.random.normal(800, 150, n_samples),
+        })
+        X = compute_corporate_metrics(df)
+        # structural PoD
+        X['default_prob'] = [
+            black_cox_pod(V, B, mu=0.05, sigma=0.25, T=1.0) for V, B in zip(df['V'], df['B'])
+        ]
+        y = (X['default_prob'] > 0.3).astype(int)
         return X, y
 
+    # -----------------------------------------------
+    # Text Embeddings
+    # -----------------------------------------------
     def get_text_embeddings(self, texts: List[str]) -> np.ndarray:
         inputs = self.tokenizer(texts, return_tensors='pt', padding=True, truncation=True)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         self.bert_model.eval()
         with torch.no_grad():
             outputs = self.bert_model(**inputs)
-        embeddings = outputs.pooler_output.cpu().numpy()
-        return embeddings
+        return outputs.pooler_output.cpu().numpy()
 
-    def train(self, X=None, y=None,
-              graph_data: GraphData = None,
-              raw_texts: List[str] = None) -> Dict:
+    # -----------------------------------------------
+    # Save and Load Model
+    # -----------------------------------------------
+    def save_model(self, path: str = "models/advanced_credit_model.joblib"):
+        import joblib, os
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        joblib.dump({
+            'catboost': self.catboost_model,
+            'nn_state_dict': self.nn_model.state_dict() if self.nn_model else None,
+            'risk_score_ann_state_dict': self.risk_score_ann.state_dict() if self.risk_score_ann else None,
+            'scaler': self.scaler,
+            'feature_names': self.feature_names
+        }, path)
+
+    def load_model(self, path: str = "models/advanced_credit_model.joblib"):
+        checkpoint = joblib.load(path)
+        self.catboost_model = checkpoint['catboost']
+        self.scaler = checkpoint['scaler']
+        self.feature_names = checkpoint['feature_names']
+
+        input_dim = len(self.feature_names) + 16 + 768 + 1  # shape of combined input features
+
+        # Initialize NN model if weights available
+        if checkpoint['nn_state_dict']:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.nn_model = CreditNN(input_dim).to(self.device)
+            self.nn_model.load_state_dict(checkpoint['nn_state_dict'])
+            self.nn_model.eval()
+
+        # Initialize RiskScore ANN if weights available
+        if checkpoint['risk_score_ann_state_dict']:
+            self.risk_score_ann = RiskScoreANN(len(self.feature_names)).to(self.device)
+            self.risk_score_ann.load_state_dict(checkpoint['risk_score_ann_state_dict'])
+            self.risk_score_ann.eval()
+
+        self.is_trained = True
+
+    # -----------------------------------------------
+    # Train
+    # -----------------------------------------------
+    def train(self,
+              X=None,
+              y=None,
+              graph_data: Optional[GraphData] = None,
+              raw_texts: Optional[List[str]] = None) -> Dict:
         if X is None or y is None:
             X, y = self.generate_training_data()
         self.feature_names = X.columns.tolist()
 
-        X_train, X_val, y_train, y_val = train_test_split(X, y, stratify=y, test_size=0.2, random_state=42)
-
-        # Scale tabular features
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, stratify=y, test_size=0.2, random_state=42
+        )
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_val_scaled = self.scaler.transform(X_val)
 
-        # Train RiskScoreANN on tabular only to learn dynamic weights
+        # RiskScore ANN
         self.risk_score_ann = RiskScoreANN(X_train_scaled.shape[1]).to(self.device)
         criterion_rs = nn.BCELoss()
         optimizer_rs = torch.optim.Adam(self.risk_score_ann.parameters(), lr=0.005)
@@ -156,55 +255,62 @@ class AdvancedCreditScoringModel:
         y_val_tensor = torch.tensor(y_val.values.reshape(-1, 1), dtype=torch.float32).to(self.device)
 
         best_val_loss = float('inf')
-        for epoch in range(50):
+        for epoch in range(30):
             self.risk_score_ann.train()
             optimizer_rs.zero_grad()
-            outputs_rs = self.risk_score_ann(X_train_tensor)
-            loss_rs = criterion_rs(outputs_rs, y_train_tensor)
-            loss_rs.backward()
+            out = self.risk_score_ann(X_train_tensor)
+            loss = criterion_rs(out, y_train_tensor)
+            loss.backward()
             optimizer_rs.step()
 
             self.risk_score_ann.eval()
             with torch.no_grad():
-                val_outputs_rs = self.risk_score_ann(X_val_tensor)
-                val_loss_rs = criterion_rs(val_outputs_rs, y_val_tensor)
-            if val_loss_rs < best_val_loss:
-                best_val_loss = val_loss_rs
+                val_out = self.risk_score_ann(X_val_tensor)
+                val_loss = criterion_rs(val_out, y_val_tensor)
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
                 torch.save(self.risk_score_ann.state_dict(), "best_risk_ann.pth")
 
         self.risk_score_ann.load_state_dict(torch.load("best_risk_ann.pth"))
         self.risk_score_ann.eval()
 
-        # Obtain graph embeddings if graph data provided
+        # Graph embeddings (if provided)
         if graph_data is not None:
             if self.gnn_model is None:
                 self.gnn_model = GNN(graph_data.num_node_features).to(self.device)
-                self.gnn_model.eval()
+            self.gnn_model.eval()
             with torch.no_grad():
                 graph_embeds = self.gnn_model(graph_data.x.to(self.device), graph_data.edge_index.to(self.device))
             train_graph_embeds = graph_embeds[:len(X_train)].cpu().numpy()
-            val_graph_embeds = graph_embeds[len(X_train):len(X_train)+len(X_val)].cpu().numpy()
+            val_graph_embeds = graph_embeds[len(X_train):len(X_train) + len(X_val)].cpu().numpy()
         else:
-            train_graph_embeds = val_graph_embeds = np.zeros((len(X_train), 16))
+            train_graph_embeds = np.zeros((len(X_train), 16))
+            val_graph_embeds = np.zeros((len(X_val), 16))
 
         # Text embeddings
         if raw_texts is not None:
             train_text_embeds = self.get_text_embeddings(raw_texts[:len(X_train)])
-            val_text_embeds = self.get_text_embeddings(raw_texts[len(X_train):len(X_train)+len(X_val)])
+            val_text_embeds = self.get_text_embeddings(raw_texts[len(X_train):len(X_train) + len(X_val)])
         else:
-            train_text_embeds = val_text_embeds = np.zeros((len(X_train), 768))
+            train_text_embeds = np.zeros((len(X_train), 768))
+            val_text_embeds = np.zeros((len(X_val), 768))
 
-        # Get risk score ANN outputs as feature
+        # Risk scores as feature
         with torch.no_grad():
             train_risk_scores = self.risk_score_ann(X_train_tensor).cpu().numpy()
             val_risk_scores = self.risk_score_ann(X_val_tensor).cpu().numpy()
 
-        # Combine inputs for final NN
+        # Ensure 2D shape for hstack
+        train_risk_scores = train_risk_scores.reshape(-1, 1)
+        val_risk_scores = val_risk_scores.reshape(-1, 1)
+
+        # Combine features for training and validation
         X_train_combined = np.hstack([X_train_scaled, train_graph_embeds, train_text_embeds, train_risk_scores])
         X_val_combined = np.hstack([X_val_scaled, val_graph_embeds, val_text_embeds, val_risk_scores])
+
         combined_input_dim = X_train_combined.shape[1]
 
-        # Train CatBoost on tabular features only
+        # CatBoost
         self.catboost_model = cb.CatBoostClassifier(
             iterations=200,
             depth=6,
@@ -215,34 +321,32 @@ class AdvancedCreditScoringModel:
         )
         self.catboost_model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=25)
 
-        # Train main NN on combined features (including dynamic risk score output)
+        # Main NN
         self.nn_model = CreditNN(combined_input_dim).to(self.device)
         criterion = nn.BCELoss()
         optimizer = torch.optim.Adam(self.nn_model.parameters(), lr=0.001)
 
-        X_train_tensor_full = torch.tensor(X_train_combined, dtype=torch.float32).to(self.device)
-        y_train_tensor_full = torch.tensor(y_train.values.reshape(-1, 1), dtype=torch.float32).to(self.device)
-        X_val_tensor_full = torch.tensor(X_val_combined, dtype=torch.float32).to(self.device)
-        y_val_tensor_full = torch.tensor(y_val.values.reshape(-1, 1), dtype=torch.float32).to(self.device)
+        X_train_full = torch.tensor(X_train_combined, dtype=torch.float32).to(self.device)
+        y_train_full = torch.tensor(y_train.values.reshape(-1, 1), dtype=torch.float32).to(self.device)
+        X_val_full = torch.tensor(X_val_combined, dtype=torch.float32).to(self.device)
+        y_val_full = torch.tensor(y_val.values.reshape(-1, 1), dtype=torch.float32).to(self.device)
 
         best_auc = 0
-        for epoch in range(100):
+        for epoch in range(50):
             self.nn_model.train()
             optimizer.zero_grad()
-            outputs = self.nn_model(X_train_tensor_full)
-            loss = criterion(outputs, y_train_tensor_full)
+            outputs = self.nn_model(X_train_full)
+            loss = criterion(outputs, y_train_full)
             loss.backward()
             optimizer.step()
 
             self.nn_model.eval()
             with torch.no_grad():
-                val_preds = self.nn_model(X_val_tensor_full).cpu().numpy()
+                val_preds = self.nn_model(X_val_full).cpu().numpy()
                 val_auc = roc_auc_score(y_val, val_preds)
-                if val_auc > best_auc:
-                    best_auc = val_auc
-                    torch.save(self.nn_model.state_dict(), "best_nn.pth")
-            if epoch % 10 == 0:
-                print(f"Epoch {epoch}, NN Val AUC: {val_auc:.4f}")
+            if val_auc > best_auc:
+                best_auc = val_auc
+                torch.save(self.nn_model.state_dict(), "best_nn.pth")
 
         self.nn_model.load_state_dict(torch.load("best_nn.pth"))
         self.is_trained = True
@@ -250,7 +354,7 @@ class AdvancedCreditScoringModel:
         # Ensemble evaluation
         cat_preds_val = self.catboost_model.predict_proba(X_val)[:, 1]
         with torch.no_grad():
-            nn_preds_val = self.nn_model(X_val_tensor_full).cpu().numpy().flatten()
+            nn_preds_val = self.nn_model(X_val_full).cpu().numpy().flatten()
 
         ensemble_preds = (cat_preds_val + nn_preds_val) / 2.0
         ensemble_auc = roc_auc_score(y_val, ensemble_preds)
@@ -263,6 +367,9 @@ class AdvancedCreditScoringModel:
             "ensemble_val_auc": ensemble_auc
         }
 
+    # -----------------------------------------------
+    # Predict
+    # -----------------------------------------------
     def predict(self, X: pd.DataFrame,
                 graph_features: np.ndarray = None,
                 text_features: np.ndarray = None) -> Dict:
@@ -288,23 +395,29 @@ class AdvancedCreditScoringModel:
         combined_tensor = torch.tensor(combined_features, dtype=torch.float32).to(self.device)
 
         cat_preds = self.catboost_model.predict_proba(X)[:, 1]
-
         self.nn_model.eval()
         with torch.no_grad():
             nn_preds = self.nn_model(combined_tensor).cpu().numpy().flatten()
 
         combined_pred = (cat_preds + nn_preds) / 2.0
-        risk_score = float(combined_pred[0] * 100)
-        prediction = 1 if combined_pred > 0.5 else 0
+        risk_score_val = float(combined_pred[0] * 100)
+        prob_high = float(combined_pred)
+        if combined_pred < 0.3:
+            risk_level_val = "Low Risk"
+        elif combined_pred < 0.7:
+            risk_level_val = "Medium Risk"
+        else:
+            risk_level_val = "High Risk"
 
         return {
-            "prediction": int(prediction),
-            "probability_low_risk": float(1 - combined_pred),
-            "probability_high_risk": float(combined_pred),
-            "risk_score": risk_score,
-            "risk_level": self._get_risk_level(risk_score)
+            "risk_score": risk_score_val,
+            "risk_level": risk_level_val,
+            "probability_high_risk": prob_high
         }
 
+    # -----------------------------------------------
+    # Explainability
+    # -----------------------------------------------
     def explain_prediction(self, X: pd.DataFrame) -> Dict:
         if self.shap_explainer is None:
             return {"error": "SHAP explainer not available"}
@@ -315,7 +428,7 @@ class AdvancedCreditScoringModel:
         shap_values = self.shap_explainer.shap_values(X)
         feature_contributions = shap_values[0]
         contributions = {f: float(val) for f, val in zip(self.feature_names, feature_contributions)}
-        sorted_contrib = sorted(contributions.items(), key=lambda x: abs(x), reverse=True)
+        sorted_contrib = sorted(contributions.items(), key=lambda x: abs(x[1]), reverse=True)
         positive_factors = [(n, v) for n, v in sorted_contrib if v > 0][:5]
         negative_factors = [(n, v) for n, v in sorted_contrib if v < 0][:5]
         return {
@@ -324,10 +437,19 @@ class AdvancedCreditScoringModel:
             "top_protective_factors": negative_factors
         }
 
+    # -----------------------------------------------
+    # Fairness
+    # -----------------------------------------------
     def evaluate_fairness(self, y_true: np.ndarray, y_pred: np.ndarray, sensitive_features: np.ndarray):
-        metric_frame = MetricFrame(metrics=selection_rate, y_true=y_true, y_pred=y_pred, sensitive_features=sensitive_features)
+        metric_frame = MetricFrame(
+            metrics=selection_rate,
+            y_true=y_true,
+            y_pred=y_pred,
+            sensitive_features=sensitive_features
+        )
         return metric_frame.by_group
 
+    # -----------------------------------------------
     def _get_risk_level(self, risk_score: float) -> str:
         if risk_score < 30:
             return "Low Risk"
@@ -336,8 +458,10 @@ class AdvancedCreditScoringModel:
         else:
             return "High Risk"
 
-
-if _name_ == "_main_":
+# ---------------------------------------------------
+# 5. Run Example
+# ---------------------------------------------------
+if __name__ == "__main__":
     model = AdvancedCreditScoringModel()
     metrics = model.train()
 
@@ -345,23 +469,16 @@ if _name_ == "_main_":
     for k, v in metrics.items():
         print(f"  {k}: {v:.3f}")
 
+    # Test prediction
     X_test, _ = model.generate_training_data(1)
-
     dummy_graph_feats = np.zeros((1, 16))
     dummy_text_feats = np.zeros((1, 768))
-
     prediction = model.predict(X_test, graph_features=dummy_graph_feats, text_features=dummy_text_feats)
     print(f"\nTest Prediction: {prediction}")
 
     explanation = model.explain_prediction(X_test)
     print(f"\nExplanation available: {'feature_contributions' in explanation}")
 
-    # Save models
-    joblib.dump({
-        'catboost': model.catboost_model,
-        'nn_state_dict': model.nn_model.state_dict(),
-        'risk_score_ann_state_dict': model.risk_score_ann.state_dict(),
-        'scaler': model.scaler,
-        'feature_names': model.feature_names
-    }, "models/advanced_credit_model.joblib")
+    os.makedirs("models", exist_ok=True)
+    model.save_model("models/advanced_credit_model.joblib")
     print("\nModel saved successfully!")

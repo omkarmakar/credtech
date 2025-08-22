@@ -1,20 +1,19 @@
 import streamlit as st
 import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-import sys
-import os
+from datetime import datetime
 import time
+import sys
+import umap
 
-# Add src directory to path
+# Add src directory to path for imports if needed
 sys.path.append('.')
 
 from data_sources import AlphaVantageClient, NewsClient, FeatureEngineer
-from credit_model import CreditScoringModel
+from credit_model import AdvancedCreditScoringModel as CreditScoringModel
 
-# Page configuration
+# Page configuration and styling
 st.set_page_config(
     page_title="CredTech - Real-Time Credit Intelligence",
     page_icon="📊",
@@ -83,27 +82,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_resource
-def load_model():
-    """Load or train the credit scoring model"""
-    model = CreditScoringModel()
+# @st.cache_resource
+# def load_model():
+#     """Load or train the credit scoring model"""
+#     model = CreditScoringModel()
     
-    # Try to load existing model
-    try:
-        model.load_model('models/credit_model.joblib')
-        st.success("✅ Pre-trained model loaded successfully!")
-    except:
-        with st.spinner("🔄 Training new model... This may take a moment."):
-            metrics = model.train()
-            model.save_model('models/credit_model.joblib')
-            st.success(f"✅ Model trained! ROC AUC: {metrics['roc_auc']:.3f}")
+#     # Try to load existing model
+#     try:
+#         model.load_model('models/credit_model.joblib')
+#         st.success("✅ Pre-trained model loaded successfully!")
+#     except:
+#         with st.spinner("🔄 Training new model... This may take a moment."):
+#             metrics = model.train()
+#             model.save_model('models/credit_model.joblib')
+#             st.success(f"✅ Model trained! ROC AUC: {metrics['roc_auc']:.3f}")
     
-    return model
+#     return model
 
-@st.cache_resource
-def load_data_clients():
-    """Initialize data clients"""
-    return AlphaVantageClient(), NewsClient(), FeatureEngineer()
+# @st.cache_resource
+# def load_data_clients():
+#     """Initialize data clients"""
+#     return AlphaVantageClient(), NewsClient(), FeatureEngineer()
 
 def create_risk_gauge(risk_score, company_name):
     """Create a risk score gauge"""
@@ -288,83 +287,152 @@ def create_news_sentiment_chart(news_data):
     
     return fig
 
+def create_fairness_bar_chart(fairness_df):
+    fig = go.Figure(go.Bar(
+        x=fairness_df.index.astype(str),
+        y=fairness_df.values,
+        marker_color='indigo'
+    ))
+    fig.update_layout(
+        title="Selection Rate by Sensitive Groups",
+        yaxis_title="Selection Rate",
+        height=350,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
+def create_performance_comparison(metrics):
+    # Expecting dictionary with keys like "catboost_val_auc", "nn_val_auc", "ensemble_val_auc"
+    labels = ["CatBoost", "Neural Network", "Ensemble"]
+    values = [metrics.get('catboost_val_auc', 0), metrics.get('nn_val_auc', 0), metrics.get('ensemble_val_auc', 0)]
+    fig = go.Figure(go.Bar(
+        x=labels,
+        y=values,
+        marker_color=['#008fd5', '#fc4f30', '#6d904f']
+    ))
+    fig.update_layout(
+        title="Validation AUC of Models",
+        yaxis=dict(range=[0, 1]),
+        height=350,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
+def create_prediction_score_histogram(scores):
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=scores,
+        nbinsx=30,
+        marker_color='#4facfe'
+    ))
+    fig.update_layout(
+        title="Prediction Score Distribution",
+        xaxis_title="Predicted Risk Score",
+        yaxis_title="Count",
+        height=350,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
+def create_text_embedding_umap(embeddings, risk_levels, docs):
+    reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
+    embedding_2d = reducer.fit_transform(embeddings)
+    # risk_levels assumed numeric or mapped to numeric
+    fig = go.Figure(go.Scatter(
+        x=embedding_2d[:, 0],
+        y=embedding_2d[:, 1],
+        mode='markers',
+        marker=dict(
+            size=8,
+            color=risk_levels,
+            colorscale='Viridis',
+            showscale=True,
+            colorbar=dict(title="Risk Level")
+        ),
+        text=docs
+    ))
+    fig.update_layout(
+        title="2D Projection of Text Embeddings (UMAP)",
+        height=400,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
+
+# Cache and load model function
+@st.cache_resource
+def load_model():
+    model = CreditScoringModel()
+    try:
+        model.load_model('models/credit_model.joblib')
+        st.success("✅ Pre-trained model loaded successfully!")
+    except Exception:
+        with st.spinner("🔄 Training new model... This may take a moment."):
+            metrics = model.train()
+            model.save_model('models/credit_model.joblib')
+            st.success(f"✅ Model trained! ROC AUC: {metrics['ensemble_val_auc']:.3f}")
+    return model
+
+@st.cache_resource
+def load_data_clients():
+    return AlphaVantageClient(), NewsClient(), FeatureEngineer()
+
+
 def main():
-    """Main Streamlit application"""
-    
-    # Header
-    st.markdown('<h1 class="main-header">🏦 CredTech Real-Time Credit Intelligence</h1>', 
-               unsafe_allow_html=True)
-    
+    st.markdown('<h1 class="main-header">🏦 CredTech Real-Time Credit Intelligence</h1>', unsafe_allow_html=True)
     st.markdown("""
     <div style="text-align: center; margin-bottom: 2rem; font-size: 1.2rem; color: #666;">
         🚀 <strong>Real-time credit scoring with explainable AI</strong> | 📊 Advanced analytics | 🎯 Instant insights
     </div>
     """, unsafe_allow_html=True)
-    
-    # Load model and data clients
+
     model = load_model()
     av_client, news_client, feature_engineer = load_data_clients()
-    
-    # Sidebar
+
     st.sidebar.header("🎛️ Credit Assessment Controls")
-    
-    # Company input
-    company_symbol = st.sidebar.text_input(
-        "📈 Company Symbol",
-        value="AAPL",
-        help="Enter a stock symbol (e.g., AAPL, MSFT, GOOGL, TSLA)"
-    ).upper()
-    
-    # Analysis options
+    company_symbol = st.sidebar.text_input("📈 Company Symbol", value="AAPL", help="Enter a stock symbol (e.g., AAPL, MSFT, GOOGL, TSLA)").upper()
     st.sidebar.subheader("🔧 Analysis Options")
     include_news = st.sidebar.checkbox("📰 Include News Sentiment", value=True)
     include_financials = st.sidebar.checkbox("💰 Include Financial Data", value=True)
-    
-    # Advanced options
     with st.sidebar.expander("⚙️ Advanced Settings"):
         confidence_threshold = st.slider("Confidence Threshold", 0.5, 0.95, 0.8)
         news_days = st.slider("News Lookback Days", 1, 30, 7)
-    
-    # Run analysis button
     run_analysis = st.sidebar.button("🚀 Run Credit Analysis", type="primary")
-    
-    # Auto-refresh option
     auto_refresh = st.sidebar.checkbox("🔄 Auto Refresh (30s)")
     if auto_refresh:
         time.sleep(30)
+        
         st.rerun()
 
-    
-    # Main content
+
     if run_analysis or 'analysis_data' not in st.session_state:
-        
         with st.spinner(f"🔍 Analyzing {company_symbol}... Fetching data and computing risk score..."):
-            
-            # Fetch company data
-            company_data = {}
-            news_data = []
-            
+            company_data, news_data = {}, []
             if include_financials:
                 company_data = av_client.get_company_overview(company_symbol)
-                
             if include_news:
                 company_name = company_data.get('Name', company_symbol)
                 news_data = news_client.get_company_news(company_name)
-            
-            # Extract features
             financial_features = feature_engineer.extract_financial_features(company_data)
             sentiment_features = feature_engineer.extract_sentiment_features(news_data)
-            
-            # Create feature vector
             feature_vector = feature_engineer.create_feature_vector(financial_features, sentiment_features)
-            
-            # Make prediction
             prediction = model.predict(feature_vector)
-            
-            # Get explanations
             explanation = model.explain_prediction(feature_vector)
-            
-            # Store in session state
+
+            # Optional: generate mock fairness metrics and prediction scores for demo
+            # In real use, replace with actual data arrays
+            fairness_metrics = None
+            prediction_scores = None
+            text_embeddings = None
+            risk_levels_numeric = None
+            documents = None
+
+            # Example: You may prepare these from your pipeline if available
+
             st.session_state['analysis_data'] = {
                 'symbol': company_symbol,
                 'company_data': company_data,
@@ -372,191 +440,142 @@ def main():
                 'prediction': prediction,
                 'explanation': explanation,
                 'feature_vector': feature_vector,
-                'timestamp': datetime.now()
+                'timestamp': datetime.now(),
+                'metrics': model.train() if not model.is_trained else {},  # Or cache previous metrics properly
+                'fairness_metrics': fairness_metrics,
+                'prediction_scores': prediction_scores,
+                'text_embeddings': text_embeddings,
+                'risk_levels_numeric': risk_levels_numeric,
+                'documents': documents,
             }
-    
-    # Display results if available
+
     if 'analysis_data' in st.session_state:
         data = st.session_state['analysis_data']
-        
-        # Main metrics row
+
         col1, col2, col3, col4 = st.columns(4)
-        
+
         with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Risk Score</h3>
-                <h2>{data['prediction']['risk_score']:.1f}/100</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.markdown(f'<div class="metric-card"><h3>Risk Score</h3><h2>{data["prediction"]["risk_score"]:.1f}/100</h2></div>', unsafe_allow_html=True)
         with col2:
-            confidence = max(data['prediction']['probability_low_risk'], 
-                           data['prediction']['probability_high_risk'])
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Confidence</h3>
-                <h2>{confidence:.1%}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            conf = max(data["prediction"].get("probability_low_risk", 0), data["prediction"].get("probability_high_risk", 0))
+            st.markdown(f'<div class="metric-card"><h3>Confidence</h3><h2>{conf:.1%}</h2></div>', unsafe_allow_html=True)
         with col3:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>News Articles</h3>
-                <h2>{len(data['news_data'])}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.markdown(f'<div class="metric-card"><h3>News Articles</h3><h2>{len(data["news_data"])}</h2></div>', unsafe_allow_html=True)
         with col4:
             avg_sentiment = np.mean([item['sentiment']['compound'] for item in data['news_data']]) if data['news_data'] else 0
-            sentiment_emoji = "😊" if avg_sentiment > 0.1 else "😐" if avg_sentiment > -0.1 else "😟"
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Avg Sentiment</h3>
-                <h2>{sentiment_emoji} {avg_sentiment:.2f}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Risk assessment
+            emoji = "😊" if avg_sentiment > 0.1 else "😐" if avg_sentiment > -0.1 else "😟"
+            st.markdown(f'<div class="metric-card"><h3>Avg Sentiment</h3><h2>{emoji} {avg_sentiment:.2f}</h2></div>', unsafe_allow_html=True)
+
         st.header("📊 Risk Assessment")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # Risk gauge
-            risk_fig, risk_level = create_risk_gauge(
-                data['prediction']['risk_score'], 
-                data['company_data'].get('Name', data['symbol'])
-            )
-            st.plotly_chart(risk_fig, use_container_width=True)
-        
-        with col2:
-            # Risk level display
-            risk_class = risk_level.lower().replace(' ', '-')
-            st.markdown(f"""
-            <div class="risk-{risk_class.split('-')[0]}">
-                <h2>{risk_level}</h2>
-                <p><strong>Risk Score:</strong> {data['prediction']['risk_score']:.1f}/100</p>
-                <p><strong>Model Confidence:</strong> {confidence:.1%}</p>
-                <p><strong>Last Updated:</strong> {data['timestamp'].strftime('%H:%M:%S')}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Explanations
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            fig, level = create_risk_gauge(data['prediction']['risk_score'], data['company_data'].get('Name', data['symbol']))
+            st.plotly_chart(fig, use_container_width=True)
+        with c2:
+            risk_class = level.lower().split(' ')[0]
+            st.markdown(f'<div class="risk-{risk_class}"><h2>{level}</h2><p><strong>Risk Score:</strong> {data["prediction"]["risk_score"]:.1f}/100</p><p><strong>Model Confidence:</strong> {conf:.1%}</p><p><strong>Last Updated:</strong> {data["timestamp"].strftime("%H:%M:%S")}</p></div>', unsafe_allow_html=True)
+
         st.header("🔍 AI Explanation (SHAP Analysis)")
-        
         if 'error' not in data['explanation']:
             col1, col2 = st.columns(2)
-            
             with col1:
-                # SHAP waterfall chart
                 shap_fig = create_shap_waterfall(data['explanation'])
                 if shap_fig:
                     st.plotly_chart(shap_fig, use_container_width=True)
-                
-                # Top risk factors
                 if 'top_risk_factors' in data['explanation']:
                     st.subheader("⚠️ Top Risk Factors")
-                    for factor, value in data['explanation']['top_risk_factors']:
-                        st.write(f"• **{factor.replace('_', ' ').title()}**: {value:+.3f}")
-            
+                    for f, v in data['explanation']['top_risk_factors']:
+                        st.write(f"• **{f.replace('_', ' ').title()}**: {v:+.3f}")
             with col2:
-                # Feature importance pie
                 pie_fig = create_feature_importance_pie(data['explanation'])
                 if pie_fig:
                     st.plotly_chart(pie_fig, use_container_width=True)
-                
-                # Protective factors
                 if 'top_protective_factors' in data['explanation']:
                     st.subheader("✅ Protective Factors")
-                    for factor, value in data['explanation']['top_protective_factors']:
-                        st.write(f"• **{factor.replace('_', ' ').title()}**: {abs(value):.3f}")
-        
+                    for f, v in data['explanation']['top_protective_factors']:
+                        st.write(f"• **{f.replace('_', ' ').title()}**: {abs(v):.3f}")
         else:
             st.warning("⚠️ Explanations temporarily unavailable. Prediction is still valid.")
-        
-        # News sentiment analysis
+
+        # News Sentiment
         if data['news_data']:
             st.header("📰 News Sentiment Analysis")
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                # Sentiment timeline
+            c1, c2 = st.columns([2, 1])
+            with c1:
                 sentiment_fig = create_news_sentiment_chart(data['news_data'])
                 if sentiment_fig:
                     st.plotly_chart(sentiment_fig, use_container_width=True)
-            
-            with col2:
+            with c2:
                 st.subheader("Recent Headlines")
                 for item in data['news_data'][:5]:
-                    sentiment_score = item['sentiment']['compound']
-                    sentiment_color = "🟢" if sentiment_score > 0.1 else "🔴" if sentiment_score < -0.1 else "🟡"
-                    
-                    st.markdown(f"""
-                    <div class="news-item">
-                        <strong>{sentiment_color} {item.get('title', item.get('headline', 'News'))[:60]}</strong><br>
-                        <small>Sentiment: {sentiment_score:.2f} | {item.get('published_at', item.get('date', 'Recent'))}</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
+                    score = item['sentiment']['compound']
+                    color = "🟢" if score > 0.1 else "🔴" if score < -0.1 else "🟡"
+                    st.markdown(f'<div class="news-item"><strong>{color} {item.get("title", item.get("headline", "News"))[:60]}</strong><br><small>Sentiment: {score:.2f} | {item.get("published_at", item.get("date", "Recent"))}</small></div>', unsafe_allow_html=True)
+
         # Company fundamentals
         st.header("💼 Company Fundamentals")
-        
         if data['company_data']:
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
+            c1, c2, c3 = st.columns(3)
+            with c1:
                 st.subheader("📈 Profitability")
-                profit_margin = data['company_data'].get('ProfitMargin', 'N/A')
-                roa = data['company_data'].get('ReturnOnAssetsTTM', 'N/A')
-                roe = data['company_data'].get('ReturnOnEquityTTM', 'N/A')
-                
-                st.write(f"**Profit Margin:** {profit_margin}")
-                st.write(f"**Return on Assets:** {roa}")
-                st.write(f"**Return on Equity:** {roe}")
-            
-            with col2:
+                st.write(f"**Profit Margin:** {data['company_data'].get('ProfitMargin', 'N/A')}")
+                st.write(f"**Return on Assets:** {data['company_data'].get('ReturnOnAssetsTTM', 'N/A')}")
+                st.write(f"**Return on Equity:** {data['company_data'].get('ReturnOnEquityTTM', 'N/A')}")
+            with c2:
                 st.subheader("💰 Valuation")
-                pe_ratio = data['company_data'].get('PERatio', 'N/A')
-                book_value = data['company_data'].get('BookValue', 'N/A')
-                market_cap = data['company_data'].get('MarketCapitalization', 'N/A')
-                
-                st.write(f"**P/E Ratio:** {pe_ratio}")
-                st.write(f"**Book Value:** ${book_value}")
-                st.write(f"**Market Cap:** ${market_cap}")
-            
-            with col3:
+                st.write(f"**P/E Ratio:** {data['company_data'].get('PERatio', 'N/A')}")
+                st.write(f"**Book Value:** ${data['company_data'].get('BookValue', 'N/A')}")
+                st.write(f"**Market Cap:** ${data['company_data'].get('MarketCapitalization', 'N/A')}")
+            with c3:
                 st.subheader("📊 Performance")
-                eps = data['company_data'].get('EPS', 'N/A')
-                beta = data['company_data'].get('Beta', 'N/A')
-                dividend_yield = data['company_data'].get('DividendYield', 'N/A')
-                
-                st.write(f"**EPS:** ${eps}")
-                st.write(f"**Beta:** {beta}")
-                st.write(f"**Dividend Yield:** {dividend_yield}")
-        
-        # Technical details
+                st.write(f"**EPS:** ${data['company_data'].get('EPS','N/A')}")
+                st.write(f"**Beta:** {data['company_data'].get('Beta','N/A')}")
+                st.write(f"**Dividend Yield:** {data['company_data'].get('DividendYield','N/A')}")
+
+        # === NEW: Fairness Metrics ===
+        if data.get('fairness_metrics') is not None:
+            st.header("⚖️ Fairness Metrics")
+            fairness_df = data['fairness_metrics']
+            st.dataframe(fairness_df)
+            fig_fair = create_fairness_bar_chart(fairness_df)
+            st.plotly_chart(fig_fair, use_container_width=True)
+
+        # === NEW: Model Performance Comparison ===
+        if data.get('metrics'):
+            st.header("📈 Model Performance Comparison")
+            perf_fig = create_performance_comparison(data['metrics'])
+            st.plotly_chart(perf_fig, use_container_width=True)
+
+        # === NEW: Prediction Score Distribution ===
+        if data.get('prediction_scores') is not None:
+            st.header("📊 Prediction Score Distribution")
+            hist_fig = create_prediction_score_histogram(data['prediction_scores'])
+            st.plotly_chart(hist_fig, use_container_width=True)
+
+        # === NEW: Text Embeddings UMAP Projection ===
+        # if data.get('text_embeddings') is not None and data.get('risk_levels_numeric') is not None:
+        #     st.header("📝 Text Embeddings Projection")
+        #     umap_fig = create_text_embedding_umap(data['text_embeddings'], data['risk_levels_numeric'], data.get('documents', []))
+        #     st.plotly_chart(umap_fig, use_container_width=True)
+
         with st.expander("🔧 Technical Details & Raw Data"):
             st.subheader("Feature Vector")
             st.dataframe(data['feature_vector'].T, use_container_width=True)
-            
             st.subheader("Model Prediction Details")
             st.json(data['prediction'])
-            
             if 'error' not in data['explanation']:
                 st.subheader("SHAP Explanation Data")
-                st.json({k: v for k, v in data['explanation'].items() if k != 'feature_contributions'})
+                filtered_exp = {k: v for k, v in data['explanation'].items() if k != 'feature_contributions'}
+                st.json(filtered_exp)
 
-    # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #666; margin-top: 2rem;">
-        🏆 <strong>CredTech Hackathon 2025</strong> | Built with ❤️ using Streamlit, XGBoost & SHAP<br>
+        🏆 <strong>CredTech Hackathon 2025</strong> | Built with ❤️ using Streamlit, CatBoost & SHAP<br>
         <small>⚡ Real-time credit intelligence powered by explainable AI</small>
     </div>
     """, unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()

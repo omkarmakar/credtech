@@ -18,3 +18,4 @@ fairlearn
 torch-geometric
 catboost
 torch
+umap
