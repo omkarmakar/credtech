@@ -19,4 +19,5 @@ torch-geometric
 catboost
 torch
 umap
+umap-learn
 transformers

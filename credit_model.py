@@ -131,6 +131,12 @@ class AdvancedCreditScoringModel:
         self.risk_score_ann = None
         self.scaler = StandardScaler()
         self.feature_names = None
+#         self.feature_names = [
+#     "fcf_ni_ratio", "capex_depr", "wcc", "market_leverage",
+#     "debt_ebitda", "coverage", "adj_coverage", "cash_burn",
+#     "runway", "quick_ratio", "yield_spread", "beta",
+#     "short_interest_ratio", "default_prob"
+# ]
         self.is_trained = False
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.shap_explainer = None
@@ -203,23 +209,42 @@ class AdvancedCreditScoringModel:
             'feature_names': self.feature_names
         }, path)
 
+    # def load_model(self, path: str = "models/advanced_credit_model.joblib"):
+    #     checkpoint = joblib.load(path)
+    #     self.catboost_model = checkpoint['catboost']
+    #     self.scaler = checkpoint['scaler']
+    #     self.feature_names = checkpoint['feature_names']
+
+    #     input_dim = len(self.feature_names) + 16 + 768 + 1  # shape of combined input features
+
+    #     # Initialize NN model if weights available
+    #     if checkpoint['nn_state_dict']:
+    #         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #         self.nn_model = CreditNN(input_dim).to(self.device)
+    #         self.nn_model.load_state_dict(checkpoint['nn_state_dict'])
+    #         self.nn_model.eval()
+
+    #     # Initialize RiskScore ANN if weights available
+    #     if checkpoint['risk_score_ann_state_dict']:
+    #         self.risk_score_ann = RiskScoreANN(len(self.feature_names)).to(self.device)
+    #         self.risk_score_ann.load_state_dict(checkpoint['risk_score_ann_state_dict'])
+    #         self.risk_score_ann.eval()
+
+    #     self.is_trained = True
     def load_model(self, path: str = "models/advanced_credit_model.joblib"):
         checkpoint = joblib.load(path)
-        self.catboost_model = checkpoint['catboost']
-        self.scaler = checkpoint['scaler']
-        self.feature_names = checkpoint['feature_names']
+        self.catboost_model = checkpoint.get('catboost', None)
+        self.scaler = checkpoint.get('scaler', self.scaler)
+        self.feature_names = checkpoint.get('feature_names', None)
 
-        input_dim = len(self.feature_names) + 16 + 768 + 1  # shape of combined input features
+        input_dim = (len(self.feature_names) if self.feature_names else 0) + 16 + 768 + 1
 
-        # Initialize NN model if weights available
-        if checkpoint['nn_state_dict']:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if checkpoint.get('nn_state_dict'):
             self.nn_model = CreditNN(input_dim).to(self.device)
             self.nn_model.load_state_dict(checkpoint['nn_state_dict'])
             self.nn_model.eval()
 
-        # Initialize RiskScore ANN if weights available
-        if checkpoint['risk_score_ann_state_dict']:
+        if checkpoint.get('risk_score_ann_state_dict'):
             self.risk_score_ann = RiskScoreANN(len(self.feature_names)).to(self.device)
             self.risk_score_ann.load_state_dict(checkpoint['risk_score_ann_state_dict'])
             self.risk_score_ann.eval()
@@ -371,11 +396,12 @@ class AdvancedCreditScoringModel:
     # Predict
     # -----------------------------------------------
     def predict(self, X: pd.DataFrame,
-                graph_features: np.ndarray = None,
-                text_features: np.ndarray = None) -> Dict:
+            graph_features: np.ndarray = None,
+            text_features: np.ndarray = None) -> Dict:
         if not self.is_trained:
             raise ValueError("Model not trained yet.")
 
+        # Ensure all required features exist
         for f in self.feature_names:
             if f not in X.columns:
                 X[f] = 0.0
@@ -383,8 +409,13 @@ class AdvancedCreditScoringModel:
 
         X_scaled = self.scaler.transform(X)
         X_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self.device)
-        with torch.no_grad():
-            risk_score_feat = self.risk_score_ann(X_tensor).cpu().numpy()
+
+        # RiskScore ANN (skip if not available)
+        if self.risk_score_ann is not None:
+            with torch.no_grad():
+                risk_score_feat = self.risk_score_ann(X_tensor).cpu().numpy()
+        else:
+            risk_score_feat = np.zeros((len(X), 1))
 
         if graph_features is None:
             graph_features = np.zeros((len(X), 16))
@@ -394,17 +425,25 @@ class AdvancedCreditScoringModel:
         combined_features = np.hstack([X_scaled, graph_features, text_features, risk_score_feat])
         combined_tensor = torch.tensor(combined_features, dtype=torch.float32).to(self.device)
 
-        cat_preds = self.catboost_model.predict_proba(X)[:, 1]
-        self.nn_model.eval()
-        with torch.no_grad():
-            nn_preds = self.nn_model(combined_tensor).cpu().numpy().flatten()
+        preds = []
 
-        combined_pred = (cat_preds + nn_preds) / 2.0
+        if self.catboost_model is not None:
+            preds.append(self.catboost_model.predict_proba(X)[:, 1])
+        if self.nn_model is not None:
+            self.nn_model.eval()
+            with torch.no_grad():
+                preds.append(self.nn_model(combined_tensor).cpu().numpy().flatten())
+
+        if not preds:
+            raise ValueError("No prediction models available (both CatBoost and NN are None).")
+
+        combined_pred = np.mean(preds, axis=0)
+
         risk_score_val = float(combined_pred[0] * 100)
-        prob_high = float(combined_pred)
-        if combined_pred < 0.3:
+        prob_high = float(combined_pred[0])
+        if prob_high < 0.3:
             risk_level_val = "Low Risk"
-        elif combined_pred < 0.7:
+        elif prob_high < 0.7:
             risk_level_val = "Medium Risk"
         else:
             risk_level_val = "High Risk"
@@ -414,6 +453,7 @@ class AdvancedCreditScoringModel:
             "risk_level": risk_level_val,
             "probability_high_risk": prob_high
         }
+
 
     # -----------------------------------------------
     # Explainability
@@ -425,17 +465,27 @@ class AdvancedCreditScoringModel:
             if f not in X.columns:
                 X[f] = 0.0
         X = X[self.feature_names]
+
         shap_values = self.shap_explainer.shap_values(X)
-        feature_contributions = shap_values[0]
-        contributions = {f: float(val) for f, val in zip(self.feature_names, feature_contributions)}
+
+        if isinstance(shap_values, list):  
+            shap_values = shap_values[1]  # positive class
+
+        if shap_values is None or len(shap_values) == 0:
+            return {"error": "Invalid SHAP output"}
+
+        shap_row = shap_values[0]
+        contributions = {f: float(val) for f, val in zip(self.feature_names, shap_row)}
         sorted_contrib = sorted(contributions.items(), key=lambda x: abs(x[1]), reverse=True)
         positive_factors = [(n, v) for n, v in sorted_contrib if v > 0][:5]
         negative_factors = [(n, v) for n, v in sorted_contrib if v < 0][:5]
+
         return {
             "feature_contributions": contributions,
             "top_risk_factors": positive_factors,
             "top_protective_factors": negative_factors
         }
+
 
     # -----------------------------------------------
     # Fairness
