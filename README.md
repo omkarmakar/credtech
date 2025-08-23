@@ -318,20 +318,15 @@ streamlit run app.py
 - **Kubernetes Deployment**: Container orchestration for production
 - **CDN Integration**: Global content delivery optimization
 
-## 🤝 Contributing
+## 🤝 Contributors  
 
-### Development Setup
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/new-feature`
-3. Follow PEP 8 coding standards
-4. Add comprehensive tests
-5. Submit pull request with detailed description
+We would like to thank all the amazing contributors who have been part of this project:  
 
-### Code Quality Standards
-- **Type Hints**: All functions must include type annotations
-- **Documentation**: Docstrings for all public methods
-- **Testing**: Minimum 80% code coverage
-- **Linting**: flake8 and black formatting
+- **Om Karmakar** - [omkarmakar07@gmail.com](mailto:omkarmakar07@gmail.com)  
+- **Jotiraditya Banerjee** - [joti.ban.2710@gmail.com](mailto:joti.ban.2710@gmail.com)  
+- **Rudra Ray** - [itisrudraray@gmail.com](mailto:itisrudraray@gmail.com)  
+- **Oyshi Mukherjee** - [oyshi0911@gmail.com](mailto:oyshi0911@gmail.com)  
+- **Kingshuk Bhandary** - [kingshukbhandaryedm@gmail.com](mailto:kingshukbhandaryedm@gmail.com)  
 
 
 ## 🏆 Hackathon Context
