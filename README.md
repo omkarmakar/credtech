@@ -20,11 +20,11 @@ CredTech is a real-time explainable credit intelligence platform that continuous
 │ • Finnhub       │    │ • Sentiment      │    │ • SHAP          │
 │ • FMP           │    │   Analysis       │    │ • Ensemble      │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                ▼
+                                │                        │
+                                ▼                        ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Streamlit Dashboard                          │
-│  • Risk Gauges  • SHAP Waterfall  • News Sentiment Timeline   │
+│  • Risk Gauges  • SHAP Waterfall  • News Sentiment Timeline     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
