@@ -235,10 +235,16 @@ class AdvancedCreditScoringModel:
         self.catboost_model = checkpoint.get('catboost', None)
         self.scaler = checkpoint.get('scaler', self.scaler)
         self.feature_names = checkpoint.get('feature_names', None)
-
+        
+        # ADD THIS BLOCK - Initialize SHAP explainer after loading CatBoost model
+        if self.catboost_model is not None:
+            self.shap_explainer = shap.TreeExplainer(self.catboost_model)
+        else:
+            self.shap_explainer = None
+        
         input_dim = (len(self.feature_names) if self.feature_names else 0) + 16 + 768 + 1
-
         nn_state_dict = checkpoint.get('nn_state_dict', None)
+
         if nn_state_dict:
             self.nn_model = CreditNN(input_dim).to(self.device)
             self.nn_model.load_state_dict(nn_state_dict)
@@ -251,6 +257,8 @@ class AdvancedCreditScoringModel:
 
         self.is_trained = True
 
+
+    
     # -----------------------------------------------
     # Train
     # -----------------------------------------------
@@ -383,7 +391,9 @@ class AdvancedCreditScoringModel:
         ensemble_preds = (cat_preds_val + nn_preds_val) / 2.0
         ensemble_auc = roc_auc_score(y_val, ensemble_preds)
 
-        self.shap_explainer = shap.TreeExplainer(self.catboost_model)
+        if self.catboost_model is not None:
+            self.shap_explainer = shap.TreeExplainer(self.catboost_model)
+
 
         return {
             "catboost_val_auc": roc_auc_score(y_val, cat_preds_val),
