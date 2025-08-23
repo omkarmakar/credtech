@@ -27,6 +27,140 @@ CredTech is a real-time explainable credit intelligence platform that continuous
 │  • Risk Gauges  • SHAP Waterfall  • News Sentiment Timeline     │
 └─────────────────────────────────────────────────────────────────┘
 ```
+## Econometric Foundation: Beyond Traditional Scoring
+
+### Black-Cox Structural Credit Risk Model
+**What makes us different:** We implement the Black-Cox first-passage structural model, a sophisticated econometric approach that models default as the first time a firm's asset value drops below a time-dependent barrier.
+
+```python
+def black_cox_pod(V, B, mu, sigma, T=1.0):
+    """
+    Black-Cox Probability of Default (Structural Credit Risk).
+    """
+    with np.errstate(divide='ignore', invalid='ignore'):
+        A0 = np.log(V / B)
+    at = mu - (sigma**2) / 2
+    denom = sigma * np.sqrt(T)
+    d1 = (-A0 + at * T) / denom
+    d2 = (-A0 - at * T) / denom
+    pod = norm.cdf(d1) + np.exp((-2 * at * A0) / (sigma**2)) * norm.cdf(d2)
+    return pod
+```
+
+**Why this matters:** Unlike FICO scores that are primarily backward-looking statistical constructs, the Black-Cox model provides an economic foundation by relating default probability to fundamental asset dynamics and market volatility. This approach:
+- Captures continuous default risk rather than point-in-time assessments
+- Incorporates market volatility and asset dynamics
+- Provides theoretical grounding in option pricing theory
+- Enables scenario analysis and stress testing
+
+### Comprehensive Financial Metrics Engineering
+
+**Corporate Risk Assessment (30+ metrics):**
+- **Cash-flow Quality:** FCF/NI ratio, CapEx/Depreciation ratio
+- **Leverage & Solvency:** Market leverage, Debt/EBITDA, Interest coverage
+- **Liquidity:** Cash runway, Quick ratio, Working capital cycle
+- **Market Signals:** Yield spreads, Beta, Short interest ratios
+
+**Sovereign Risk Assessment (15+ metrics):**
+- **Fiscal Health:** Debt/GDP, Primary balance/GDP
+- **External Stability:** Current account/GDP, Import coverage
+- **Debt Dynamics:** External debt/exports, Debt service/revenue
+
+**Econometric Advantage:** These metrics go beyond traditional ratios by incorporating:
+1. **Dynamic relationships** between cash flows and capital structure
+2. **Market-based signals** that reflect real-time sentiment
+3. **Cross-sectional** and **time-series** analysis capabilities
+4. **Scenario-based** stress testing frameworks
+
+## 🤖 Advanced Machine Learning Architecture
+
+### Multi-Modal Ensemble Approach
+**Technical Innovation:** Our system combines four distinct ML approaches:
+
+1. **Risk Score ANN:** 32→16→1 neural network for base risk assessment
+2. **CatBoost Classifier:** Gradient boosting optimized for categorical features
+3. **Main Neural Network:** 128→64→1 with dropout and batch normalization
+4. **Graph Neural Networks:** Relationship modeling via GCN layers
+
+**Why this is superior:**
+- **Ensemble robustness:** Multiple models reduce single-point-of-failure risk
+- **Feature complementarity:** Different models capture different aspects of risk
+- **Adaptive learning:** Neural networks adapt to changing market conditions
+- **Graph relationships:** Captures systemic risk through network effects
+
+### Graph Neural Networks for Systemic Risk
+**Innovation:** Integration of PyTorch Geometric for relationship modeling:
+```python
+class GNN(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int = 64, output_dim: int = 16):
+        super(GNN, self).__init__()
+        self.conv1 = GCNConv(input_dim, hidden_dim)
+        self.conv2 = GCNConv(hidden_dim, output_dim)
+```
+
+**Business Impact:** Traditional models ignore interconnectedness. Our GNN approach:
+- Models **counterparty relationships** and **supply chain dependencies**
+- Captures **contagion effects** during market stress
+- Identifies **systemic risk clusters** in portfolios
+- Enables **portfolio-level optimization**
+
+### BERT-Based Sentiment Integration
+**Technical Implementation:** Multi-modal learning combining numerical and textual data:
+- **768-dimensional BERT embeddings** for news sentiment
+- **Real-time processing** of market communications
+- **Attention mechanisms** for relevant information extraction
+
+**Advantage over competitors:** Most credit models ignore unstructured data. Our approach:
+- Incorporates **forward-looking sentiment** vs. backward-looking financials
+- Processes **real-time news flow** for immediate risk updates
+- Handles **multiple languages** and **financial jargon**
+- Provides **interpretable sentiment contributions**
+
+## 🔍 Explainable AI Without Black Boxes
+
+### SHAP-Based Model Interpretability
+**Technical Implementation:**
+```python
+def explain_prediction(self, X: pd.DataFrame) -> Dict:
+    if self.shap_explainer is None:
+        return {"error": "SHAP explainer not available"}
+    
+    shap_values = self.shap_explainer.shap_values(X)
+    if isinstance(shap_values, list):
+        shap_values = shap_values[1]  # positive class
+    
+    contributions = {f: float(val) for f, val in zip(self.feature_names, shap_row)}
+    return {
+        "feature_contributions": contributions,
+        "top_risk_factors": positive_factors,
+        "top_protective_factors": negative_factors
+    }
+```
+
+**Regulatory Advantage:** Unlike LLM-based explanations that can hallucinate:
+- **Mathematically consistent** explanations based on game theory
+- **Additive feature contributions** sum to final prediction
+- **Regulatory compliant** with GDPR "right to explanation"
+- **Stakeholder friendly** visualizations via waterfall charts
+
+### Fairness-Aware Machine Learning
+**Implementation:** Built-in bias detection and mitigation:
+```python
+def evaluate_fairness(self, y_true: np.ndarray, y_pred: np.ndarray, sensitive_features: np.ndarray):
+    metric_frame = MetricFrame(
+        metrics=selection_rate,
+        y_true=y_true,
+        y_pred=y_pred,
+        sensitive_features=sensitive_features
+    )
+    return metric_frame.by_group
+```
+
+**Competitive Advantage:** Proactive fairness assessment vs. reactive compliance:
+- **Algorithmic auditing** across protected characteristics  
+- **Disparate impact analysis** built into model pipeline
+- **Fairness-accuracy tradeoff** optimization
+- **Continuous monitoring** for model drift
 
 ### Component Details
 
