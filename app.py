@@ -10,6 +10,12 @@ import umap
 # Add src directory to path for imports if needed
 sys.path.append('.')
 
+alpha_vantage_key = st.secrets["ALPHA_VANTAGE_API_KEY"]
+news_api_key = st.secrets["NEWS_API_KEY"]
+finnhub_api_key = st.secrets["FINNHUB_API_KEY"]
+fmp_key = st.secrets["FMP_KEY"]
+twelvedata_key = st.secrets["TWELVEDATA_API_KEY"]
+
 from data_sources import AlphaVantageClient, NewsClient, FeatureEngineer
 from credit_model import AdvancedCreditScoringModel as CreditScoringModel
 
