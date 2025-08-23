@@ -16,9 +16,9 @@ finnhub_api_key = st.secrets["FINNHUB_API_KEY"]
 fmp_key = st.secrets["FMP_KEY"]
 twelvedata_key = st.secrets["TWELVEDATA_API_KEY"]
 
-from data_sources import ImprovedAlphaVantageClient as AlphaVantageClient
-from data_sources import EnhancedNewsClient as NewsClient
-from data_sources import ImprovedFeatureEngineer as FeatureEngineer
+from data_sources import AlphaVantageClient as AlphaVantageClient
+from data_sources import NewsClient as NewsClient
+from data_sources import FeatureEngineer as FeatureEngineer
 
 from credit_model import AdvancedCreditScoringModel as CreditScoringModel
 
