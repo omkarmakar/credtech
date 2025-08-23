@@ -417,9 +417,14 @@ def main():
             if include_news:
                 company_name = company_data.get('Name', company_symbol)
                 news_data = news_client.get_company_news(company_name)
+            # financial_features = feature_engineer.extract_financial_features(company_data)
+            # sentiment_features = feature_engineer.extract_sentiment_features(news_data)
+            # feature_vector = feature_engineer.create_feature_vector(financial_features, sentiment_features)
+            # print(model.feature_names)
             financial_features = feature_engineer.extract_financial_features(company_data)
             sentiment_features = feature_engineer.extract_sentiment_features(news_data)
-            feature_vector = feature_engineer.create_feature_vector(financial_features, sentiment_features)
+            # feature_vector = feature_engineer.create_feature_vector(financial_features, sentiment_features, model.feature_names)
+            feature_vector = feature_engineer.create_feature_vector(financial_features, sentiment_features, model.feature_names if model.feature_names else None)
             prediction = model.predict(feature_vector)
             explanation = model.explain_prediction(feature_vector)
 
