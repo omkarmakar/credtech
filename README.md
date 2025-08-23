@@ -333,9 +333,6 @@ streamlit run app.py
 - **Testing**: Minimum 80% code coverage
 - **Linting**: flake8 and black formatting
 
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🏆 Hackathon Context
 
