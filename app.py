@@ -151,7 +151,12 @@ def create_shap_waterfall(explanation_data):
     sorted_contributions = sorted(contributions.items(), key=lambda x: abs(x[1]), reverse=True)
     
     # Take top 10 features
-    top_features = sorted_contributions[:10]
+    # top_features = sorted_contributions[:10]
+    # Always include financial ratios of interest if present
+    important_keys = ['roe', 'pe_ratio', 'peg_ratio', 'debt_to_capital_employed']
+    top_features = [item for item in sorted_contributions if item[0] in important_keys]
+    top_features += [item for item in sorted_contributions if item[0] not in important_keys][:10]
+
     
     features = [feature.replace('_', ' ').title() for feature, value in top_features]
     values = [value for feature, value in top_features]
