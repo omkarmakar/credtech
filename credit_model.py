@@ -703,146 +703,347 @@ class AdvancedCreditScoringModel:
     # ENHANCED Predict Method
     # -----------------------------------------------
     
-    def predict(self, X: pd.DataFrame, 
-                graph_features: np.ndarray = None,
-                text_features: np.ndarray = None) -> Dict:
-        """ENHANCED: Prediction with better error handling"""
+    # def predict(self, X: pd.DataFrame, 
+    #             graph_features: np.ndarray = None,
+    #             text_features: np.ndarray = None) -> Dict:
+    #     """ENHANCED: Prediction with better error handling"""
         
-        if not self.is_trained:
-            raise ValueError("Model not trained yet. Call train() first.")
+    #     if not self.is_trained:
+    #         raise ValueError("Model not trained yet. Call train() first.")
         
-        try:
-            # Ensure all required features exist
-            for f in self.feature_names:
-                if f not in X.columns:
-                    X[f] = 0.0
+    #     try:
+    #         # Ensure all required features exist
+    #         for f in self.feature_names:
+    #             if f not in X.columns:
+    #                 X[f] = 0.0
             
-            X = X[self.feature_names]
-            X_scaled = self.scaler.transform(X)
+    #         X = X[self.feature_names]
+    #         X_scaled = self.scaler.transform(X)
             
-            # Generate risk score features
-            X_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self.device)
+    #         # Generate risk score features
+    #         X_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self.device)
             
-            if self.risk_score_ann is not None:
-                self.risk_score_ann.eval()
-                with torch.no_grad():
-                    # FIXED: Use sigmoid for feature extraction
-                    risk_score_logits = self.risk_score_ann(X_tensor)
-                    risk_score_feat = torch.sigmoid(risk_score_logits).cpu().numpy()
-            else:
-                risk_score_feat = np.zeros((len(X), 1))
+    #         if self.risk_score_ann is not None:
+    #             self.risk_score_ann.eval()
+    #             with torch.no_grad():
+    #                 # FIXED: Use sigmoid for feature extraction
+    #                 risk_score_logits = self.risk_score_ann(X_tensor)
+    #                 risk_score_feat = torch.sigmoid(risk_score_logits).cpu().numpy()
+    #         else:
+    #             risk_score_feat = np.zeros((len(X), 1))
             
-            # Handle missing embeddings
-            if graph_features is None:
-                graph_features = np.zeros((len(X), 16))
-            if text_features is None:
-                text_features = np.zeros((len(X), 768))
+    #         # Handle missing embeddings
+    #         if graph_features is None:
+    #             graph_features = np.zeros((len(X), 16))
+    #         if text_features is None:
+    #             text_features = np.zeros((len(X), 768))
             
-            # Combine features
-            combined_features = np.hstack([X_scaled, graph_features, text_features, risk_score_feat])
-            combined_tensor = torch.tensor(combined_features, dtype=torch.float32).to(self.device)
+    #         # Combine features
+    #         combined_features = np.hstack([X_scaled, graph_features, text_features, risk_score_feat])
+    #         combined_tensor = torch.tensor(combined_features, dtype=torch.float32).to(self.device)
             
-            predictions = []
+    #         predictions = []
             
-            # CatBoost prediction
-            if self.catboost_model is not None:
-                cat_pred = self.catboost_model.predict_proba(X)[:, 1]
-                predictions.append(cat_pred)
+    #         # CatBoost prediction
+    #         if self.catboost_model is not None:
+    #             cat_pred = self.catboost_model.predict_proba(X)[:, 1]
+    #             predictions.append(cat_pred)
             
-            # FIXED: Neural network prediction
-            if self.nn_model is not None:
-                self.nn_model.eval()
-                with torch.no_grad():
-                    nn_logits = self.nn_model(combined_tensor)
-                    nn_pred = torch.sigmoid(nn_logits).cpu().numpy().flatten()
-                    predictions.append(nn_pred)
+    #         # FIXED: Neural network prediction
+    #         if self.nn_model is not None:
+    #             self.nn_model.eval()
+    #             with torch.no_grad():
+    #                 nn_logits = self.nn_model(combined_tensor)
+    #                 nn_pred = torch.sigmoid(nn_logits).cpu().numpy().flatten()
+    #                 predictions.append(nn_pred)
             
-            if not predictions:
-                raise ValueError("No trained models available for prediction.")
+    #         if not predictions:
+    #             raise ValueError("No trained models available for prediction.")
             
-            # Ensemble prediction
-            final_pred = np.mean(predictions, axis=0)
+    #         # Ensemble prediction
+    #         final_pred = np.mean(predictions, axis=0)
             
-            risk_score = float(final_pred[0] * 100)
-            prob_high = float(final_pred[0])
+    #         risk_score = float(final_pred[0] * 100)
+    #         prob_high = float(final_pred[0])
             
-            # Enhanced risk categorization
-            if prob_high < 0.25:
-                risk_level = "Low Risk"
-            elif prob_high < 0.65:
-                risk_level = "Medium Risk"
-            else:
-                risk_level = "High Risk"
+    #         # Enhanced risk categorization
+    #         if prob_high < 0.25:
+    #             risk_level = "Low Risk"
+    #         elif prob_high < 0.65:
+    #             risk_level = "Medium Risk"
+    #         else:
+    #             risk_level = "High Risk"
             
-            return {
-                "risk_score": risk_score,
-                "risk_level": risk_level,
-                "probability_high_risk": prob_high,
-                "model_confidence": float(1 - 2 * abs(prob_high - 0.5))  # Confidence metric
-            }
+    #         return {
+    #             "risk_score": risk_score,
+    #             "risk_level": risk_level,
+    #             "probability_high_risk": prob_high,
+    #             "model_confidence": float(1 - 2 * abs(prob_high - 0.5))  # Confidence metric
+    #         }
         
-        except Exception as e:
-            print(f"Prediction error: {e}")
-            return {
-                "risk_score": 50.0,
-                "risk_level": "Medium Risk",
-                "probability_high_risk": 0.5,
-                "error": str(e)
-            }
+    #     except Exception as e:
+    #         print(f"Prediction error: {e}")
+    #         return {
+    #             "risk_score": 50.0,
+    #             "risk_level": "Medium Risk",
+    #             "probability_high_risk": 0.5,
+    #             "error": str(e)
+    #         }
+
+    # # -----------------------------------------------
+    # # ENHANCED Explainability
+    # # -----------------------------------------------
+    
+    # def explain_prediction(self, X: pd.DataFrame) -> Dict:
+    #     """ENHANCED: SHAP explanations with better error handling"""
+        
+    #     if self.shap_explainer is None:
+    #         return {"error": "SHAP explainer not available. Train CatBoost model first."}
+        
+    #     try:
+    #         # Ensure feature alignment
+    #         for f in self.feature_names:
+    #             if f not in X.columns:
+    #                 X[f] = 0.0
+            
+    #         X = X[self.feature_names]
+            
+    #         # Get SHAP values
+    #         shap_values = self.shap_explainer.shap_values(X)
+            
+    #         if isinstance(shap_values, list):
+    #             shap_values = shap_values[1]  # Positive class
+            
+    #         if shap_values is None or len(shap_values) == 0:
+    #             return {"error": "Could not compute SHAP values"}
+            
+    #         shap_row = shap_values[0]
+    #         base_value = self.shap_explainer.expected_value
+    #         if isinstance(base_value, list):
+    #             base_value = base_value[1]
+            
+    #         # Feature contributions
+    #         contributions = {f: float(val) for f, val in zip(self.feature_names, shap_row)}
+            
+    #         # Sort by absolute contribution
+    #         sorted_contrib = sorted(contributions.items(), key=lambda x: abs(x[1]), reverse=True)
+            
+    #         # Top risk and protective factors
+    #         positive_factors = [(name, contrib) for name, contrib in sorted_contrib if contrib > 0][:5]
+    #         negative_factors = [(name, contrib) for name, contrib in sorted_contrib if contrib < 0][:5]
+            
+    #         return {
+    #             "feature_contributions": contributions,
+    #             "base_value": float(base_value),
+    #             "top_risk_factors": positive_factors,
+    #             "top_protective_factors": negative_factors,
+    #             "prediction_explanation": f"Base risk: {base_value:.3f}, "
+    #                                     f"Final prediction: {base_value + sum(shap_row):.3f}"
+    #         }
+        
+    #     except Exception as e:
+    #         return {"error": f"Explanation failed: {str(e)}"}
 
     # -----------------------------------------------
-    # ENHANCED Explainability
+    # ENHANCED Predict + SHAP Explain
     # -----------------------------------------------
-    
-    def explain_prediction(self, X: pd.DataFrame) -> Dict:
-        """ENHANCED: SHAP explanations with better error handling"""
-        
+
+    # def predict(self, feature_vector: Dict) -> Dict:
+    #     """Predict risk score using trained models with consistent feature order"""
+    #     if not self.is_trained:
+    #         raise ValueError("Model not trained yet. Call train() first.")
+    #     if self.feature_names is None:
+    #         raise ValueError("Feature names not set. Ensure training has been done.")
+
+    #     # Reorder features to match training
+    #     x_df = pd.DataFrame([feature_vector])
+    #     x_df = x_df.reindex(columns=self.feature_names, fill_value=0)
+
+    #     # Scale
+    #     x_scaled = self.scaler.transform(x_df)
+
+    #     # CatBoost prediction
+    #     cat_pred = self.catboost_model.predict_proba(x_df)[:, 1]
+
+    #     # Neural net prediction
+    #     x_tensor = torch.tensor(x_scaled, dtype=torch.float32).to(self.device)
+    #     self.nn_model.eval()
+    #     with torch.no_grad():
+    #         nn_pred = torch.sigmoid(self.nn_model(x_tensor)).cpu().numpy().flatten()
+
+    #     # Ensemble
+    #     ensemble_pred = (cat_pred + nn_pred) / 2.0
+    #     risk_score = float(ensemble_pred[0] * 100)
+
+    #     return {
+    #         "risk_score": risk_score,
+    #         "probability_low_risk": float(1 - ensemble_pred[0]),
+    #         "probability_high_risk": float(ensemble_pred[0])
+    #     }
+
+    # def explain_prediction(self, feature_vector: Dict) -> Dict:
+    #     """Explain prediction using SHAP values"""
+    #     try:
+    #         x_df = pd.DataFrame([feature_vector])
+    #         x_df = x_df.reindex(columns=self.feature_names, fill_value=0)
+
+    #         shap_values = self.shap_explainer.shap_values(x_df)
+    #         base_value = self.shap_explainer.expected_value
+
+    #         return {
+    #             "feature_contributions": dict(zip(self.feature_names, shap_values[0])),
+    #             "base_value": float(base_value),
+    #         }
+    #     except Exception as e:
+    #         return {"error": f"SHAP explanation failed: {str(e)}"}
+
+    # def predict(self, feature_vector: Dict) -> Dict:
+    #     """Predict risk score using trained models with consistent feature order"""
+    #     if not self.is_trained:
+    #         raise ValueError("Model not trained yet. Call train() first.")
+    #     if self.feature_names is None:
+    #         raise ValueError("Feature names not set. Ensure training has been done.")
+
+    #     # Handle both dict and DataFrame inputs
+    #     if isinstance(feature_vector, pd.DataFrame):
+    #         x_df = feature_vector.copy()
+    #     else:
+    #         x_df = pd.DataFrame([feature_vector])
+
+    #     # Reorder features to match training
+    #     x_df = x_df.reindex(columns=self.feature_names, fill_value=0)
+
+    #     # Scale
+    #     x_scaled = self.scaler.transform(x_df)
+
+    #     # CatBoost prediction
+    #     cat_pred = self.catboost_model.predict_proba(x_df)[:, 1]
+
+    #     # Neural net prediction
+    #     x_tensor = torch.tensor(x_scaled, dtype=torch.float32).to(self.device)
+    #     self.nn_model.eval()
+    #     with torch.no_grad():
+    #         nn_pred = torch.sigmoid(self.nn_model(x_tensor)).cpu().numpy().flatten()
+
+    #     # Ensemble
+    #     ensemble_pred = (cat_pred + nn_pred) / 2.0
+    #     risk_score = float(ensemble_pred[0] * 100)
+
+    #     return {
+    #         "risk_score": risk_score,
+    #         "probability_low_risk": float(1 - ensemble_pred[0]),
+    #         "probability_high_risk": float(ensemble_pred[0])
+    #     }
+    def predict(self, feature_vector: Dict,
+            graph_features: np.ndarray = None,
+            text_features: np.ndarray = None) -> Dict:
+        """Predict risk score using trained models with consistent feature order"""
+
+        if not self.is_trained:
+            raise ValueError("Model not trained yet. Call train() first.")
+        if self.feature_names is None:
+            raise ValueError("Feature names not set. Ensure training has been done.")
+
+        # Ensure DataFrame format
+        if isinstance(feature_vector, pd.DataFrame):
+            x_df = feature_vector.copy()
+        else:
+            x_df = pd.DataFrame([feature_vector])
+
+        # Align with training features
+        x_df = x_df.reindex(columns=self.feature_names, fill_value=0)
+
+        # Scale financials
+        x_scaled = self.scaler.transform(x_df)
+
+        # Risk score ANN feature
+        if self.risk_score_ann is not None:
+            self.risk_score_ann.eval()
+            x_tensor = torch.tensor(x_scaled, dtype=torch.float32).to(self.device)
+            with torch.no_grad():
+                risk_score_feat = torch.sigmoid(self.risk_score_ann(x_tensor)).cpu().numpy()
+        else:
+            risk_score_feat = np.zeros((len(x_df), 1))
+
+        # Default placeholders for graph & text embeddings
+        if graph_features is None:
+            graph_features = np.zeros((len(x_df), 16))
+        if text_features is None:
+            text_features = np.zeros((len(x_df), 768))
+
+        # Combine all features like in training
+        combined_features = np.hstack([x_scaled, graph_features, text_features, risk_score_feat])
+        combined_tensor = torch.tensor(combined_features, dtype=torch.float32).to(self.device)
+
+        # CatBoost prediction (uses only financials)
+        cat_pred = self.catboost_model.predict_proba(x_df)[:, 1]
+
+        # Neural net prediction (uses full combined features)
+        self.nn_model.eval()
+        with torch.no_grad():
+            nn_pred = torch.sigmoid(self.nn_model(combined_tensor)).cpu().numpy().flatten()
+
+        # Ensemble
+        ensemble_pred = (cat_pred + nn_pred) / 2.0
+        risk_score = float(ensemble_pred[0] * 100)
+
+        return {
+            "risk_score": risk_score,
+            "probability_low_risk": float(1 - ensemble_pred[0]),
+            "probability_high_risk": float(ensemble_pred[0])
+        }
+
+
+    def explain_prediction(self, feature_vector: Dict) -> Dict:
+        """Explain prediction using SHAP values with top risk/protective factors"""
         if self.shap_explainer is None:
             return {"error": "SHAP explainer not available. Train CatBoost model first."}
-        
+
         try:
-            # Ensure feature alignment
-            for f in self.feature_names:
-                if f not in X.columns:
-                    X[f] = 0.0
-            
-            X = X[self.feature_names]
-            
-            # Get SHAP values
-            shap_values = self.shap_explainer.shap_values(X)
-            
-            if isinstance(shap_values, list):
-                shap_values = shap_values[1]  # Positive class
-            
-            if shap_values is None or len(shap_values) == 0:
-                return {"error": "Could not compute SHAP values"}
-            
-            shap_row = shap_values[0]
+            # Handle dict or DataFrame input
+            if isinstance(feature_vector, pd.DataFrame):
+                x_df = feature_vector.copy()
+            else:
+                x_df = pd.DataFrame([feature_vector])
+
+            x_df = x_df.reindex(columns=self.feature_names, fill_value=0)
+
+            shap_values = self.shap_explainer.shap_values(x_df)
             base_value = self.shap_explainer.expected_value
-            if isinstance(base_value, list):
-                base_value = base_value[1]
-            
-            # Feature contributions
+
+            # Handle binary classifier returning list of arrays
+            if isinstance(shap_values, list):
+                shap_values = shap_values[1]  # take positive class
+                if isinstance(base_value, list):
+                    base_value = base_value[1]
+
+            shap_row = shap_values[0]
+
+            # Contributions per feature
             contributions = {f: float(val) for f, val in zip(self.feature_names, shap_row)}
-            
-            # Sort by absolute contribution
+
+            # Sort by absolute impact
             sorted_contrib = sorted(contributions.items(), key=lambda x: abs(x[1]), reverse=True)
-            
-            # Top risk and protective factors
-            positive_factors = [(name, contrib) for name, contrib in sorted_contrib if contrib > 0][:5]
-            negative_factors = [(name, contrib) for name, contrib in sorted_contrib if contrib < 0][:5]
-            
+
+            # Separate top positive (risk ↑) and negative (risk ↓)
+            top_risk_factors = [(name, val) for name, val in sorted_contrib if val > 0][:5]
+            top_protective_factors = [(name, val) for name, val in sorted_contrib if val < 0][:5]
+
             return {
                 "feature_contributions": contributions,
                 "base_value": float(base_value),
-                "top_risk_factors": positive_factors,
-                "top_protective_factors": negative_factors,
-                "prediction_explanation": f"Base risk: {base_value:.3f}, "
-                                        f"Final prediction: {base_value + sum(shap_row):.3f}"
+                "top_risk_factors": top_risk_factors,
+                "top_protective_factors": top_protective_factors,
+                "prediction_explanation": (
+                    f"Base risk: {base_value:.3f}, "
+                    f"Final prediction: {base_value + sum(shap_row):.3f}"
+                )
             }
-        
+
         except Exception as e:
-            return {"error": f"Explanation failed: {str(e)}"}
+            return {"error": f"SHAP explanation failed: {str(e)}"}
+
+
 
     # -----------------------------------------------
     # ENHANCED Save and Load Methods
@@ -1092,8 +1293,11 @@ if __name__ == "__main__":
     
     # Test prediction
     print("\n🔮 Testing enhanced prediction...")
+    # X_test, _ = model.generate_training_data(1)
+    # prediction = model.predict(X_test)
     X_test, _ = model.generate_training_data(1)
-    prediction = model.predict(X_test)
+    prediction = model.predict(X_test.iloc[0].to_dict())
+
     
     print("Enhanced Prediction Results:")
     for key, value in prediction.items():

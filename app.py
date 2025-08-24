@@ -91,27 +91,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# @st.cache_resource
-# def load_model():
-#     """Load or train the credit scoring model"""
-#     model = CreditScoringModel()
-    
-#     # Try to load existing model
-#     try:
-#         model.load_model('models/credit_model.joblib')
-#         st.success("✅ Pre-trained model loaded successfully!")
-#     except:
-#         with st.spinner("🔄 Training new model... This may take a moment."):
-#             metrics = model.train()
-#             model.save_model('models/credit_model.joblib')
-#             st.success(f"✅ Model trained! ROC AUC: {metrics['roc_auc']:.3f}")
-    
-#     return model
-
-# @st.cache_resource
-# def load_data_clients():
-#     """Initialize data clients"""
-#     return AlphaVantageClient(), NewsClient(), FeatureEngineer()
 
 def create_risk_gauge(risk_score, company_name):
     """Create a risk score gauge"""

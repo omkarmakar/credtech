@@ -498,36 +498,58 @@ class FeatureEngineer:
             'news_volume': len(news_data),
             'positive_ratio': float(len([s for s in sentiments if s > 0]) / len(sentiments)) if sentiments else 0.5
         }
+    def create_feature_vector(
+        self,
+        financial_features: Dict,
+        sentiment_features: Optional[Dict] = None,
+        feature_names: Optional[List[str]] = None
+    ) -> Dict:
+        
+        sentiment_features = sentiment_features or {}
+        feature_vector = {**financial_features, **sentiment_features}
+
+        # Replace missing/zero values with small epsilon
+        for k, v in feature_vector.items():
+            if v is None or (isinstance(v, (int, float)) and v == 0):
+                feature_vector[k] = 1e-6
+
+        # Align with model’s expected feature order
+        if feature_names:
+            aligned = {name: feature_vector.get(name, 0) for name in feature_names}
+            return aligned
+
+        return feature_vector
+
     
-    def create_feature_vector(self, financial_features: Dict, sentiment_features: Dict,
-                            model_feature_names: Optional[List[str]] = None) -> pd.DataFrame:
-        """Create final feature vector with all enhancements"""
+    # def create_feature_vector(self, financial_features: Dict, sentiment_features: Dict,
+    #                         model_feature_names: Optional[List[str]] = None) -> pd.DataFrame:
+    #     """Create final feature vector with all enhancements"""
         
-        all_features = {**financial_features, **sentiment_features}
+    #     all_features = {**financial_features, **sentiment_features}
         
-        # Add interaction features
-        all_features['sentiment_pe_interaction'] = (all_features.get('avg_sentiment', 0) * 
-                                                   all_features.get('pe_ratio', 15))
-        all_features['volatility_beta_interaction'] = (all_features.get('sentiment_volatility', 0.1) * 
-                                                      all_features.get('beta', 1.0))
+    #     # Add interaction features
+    #     all_features['sentiment_pe_interaction'] = (all_features.get('avg_sentiment', 0) * 
+    #                                                all_features.get('pe_ratio', 15))
+    #     all_features['volatility_beta_interaction'] = (all_features.get('sentiment_volatility', 0.1) * 
+    #                                                   all_features.get('beta', 1.0))
         
-        if model_feature_names is not None:
-            # Ensure all model features exist
-            for feat in model_feature_names:
-                if feat not in all_features:
-                    if 'ratio' in feat.lower() or 'margin' in feat.lower():
-                        all_features[feat] = 0.1
-                    elif 'yield' in feat.lower():
-                        all_features[feat] = 0.05
-                    elif 'volume' in feat.lower() or 'debt' in feat.lower() or 'equity' in feat.lower():
-                        all_features[feat] = 1e6
-                    else:
-                        all_features[feat] = 1.0
+    #     if model_feature_names is not None:
+    #         # Ensure all model features exist
+    #         for feat in model_feature_names:
+    #             if feat not in all_features:
+    #                 if 'ratio' in feat.lower() or 'margin' in feat.lower():
+    #                     all_features[feat] = 0.1
+    #                 elif 'yield' in feat.lower():
+    #                     all_features[feat] = 0.05
+    #                 elif 'volume' in feat.lower() or 'debt' in feat.lower() or 'equity' in feat.lower():
+    #                     all_features[feat] = 1e6
+    #                 else:
+    #                     all_features[feat] = 1.0
             
-            ordered_vector = {f: all_features[f] for f in model_feature_names}
-            return pd.DataFrame([ordered_vector])
-        else:
-            return pd.DataFrame([all_features])
+    #         ordered_vector = {f: all_features[f] for f in model_feature_names}
+    #         return pd.DataFrame([ordered_vector])
+    #     else:
+    #         return pd.DataFrame([all_features])
     
     def _safe_float(self, value) -> float:
         """Safely convert value to float"""
@@ -537,6 +559,7 @@ class FeatureEngineer:
             return float(value)
         except (ValueError, TypeError):
             return 0.0
+    
 
 # =============================================================================
 # ENHANCED CONVENIENCE FUNCTION
@@ -560,10 +583,14 @@ def get_enhanced_company_data(symbol: str) -> Dict:
         
         # Extract features with zero elimination
         financial_features = feature_engineer.extract_financial_features(company_data)
+        print(financial_features)
+        print("-----")
         sentiment_features = feature_engineer.extract_sentiment_features(news_data)
-        
+        print(sentiment_features)
+        print("-----")
         # Create feature vector
         feature_vector = feature_engineer.create_feature_vector(financial_features, sentiment_features)
+        print(feature_vector)
         
         # Calculate statistics
         zero_count = sum(1 for v in financial_features.values() if v == 0)
