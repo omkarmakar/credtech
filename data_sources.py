@@ -317,6 +317,7 @@ class FeatureEngineer:
             'interest_expense': self._safe_extract(fmp_data, 'interest_expense', revenue * 0.02),
             'op_cf': self._safe_extract(fmp_data, 'operatingCashFlow', revenue * 0.08),  # FIXED
             
+            
             # Balance sheet features
             'current_assets': self._safe_extract(fmp_data, 'totalCurrentAssets', revenue * 0.4),
             'current_liabilities': self._safe_extract(fmp_data, 'totalCurrentLiabilities', revenue * 0.25),
@@ -345,6 +346,12 @@ class FeatureEngineer:
             'benchmark_yield': self.treasury_yield / 100,  # Convert to decimal
             'issuer_yield': self._estimate_corporate_yield(company_data) / 100  # Convert to decimal
         }
+        features['peg_ratio'] = self._safe_float(company_data.get('PEGRatio', 1.0)) or 1.0
+
+        # Debt to Capital Employed = Total Debt / (Total Debt + Equity)
+        total_debt = features.get('total_debt', 0.0)
+        equity = features.get('book_value', 1.0) * 1e6  # rough equity proxy
+        features['debt_to_capital_employed'] = total_debt / (total_debt + equity) if (total_debt + equity) > 0 else 0.0
         
         # STEP 3: Calculate working capital metrics (FIXED)
         features.update(self._calculate_working_capital_days(features))

@@ -331,8 +331,18 @@ class AdvancedCreditScoringModel:
             'V': np.random.lognormal(np.log(1000), 0.3, n_samples),  # More stable
             'B': np.random.lognormal(np.log(800), 0.3, n_samples),   # More stable
         })
+        df['roe'] = np.random.normal(0.15, 0.05, n_samples)
+        df['pe_ratio'] = np.random.normal(15, 5, n_samples)
+        df['peg_ratio'] = np.random.normal(1.2, 0.5, n_samples)
+        df['debt_to_capital_employed'] = np.random.uniform(0.1, 0.6, n_samples)
+
         
         X = compute_corporate_metrics(df)
+        X['roe'] = df['roe']
+        X['pe_ratio'] = df['pe_ratio']
+        X['peg_ratio'] = df['peg_ratio']
+        X['debt_to_capital_employed'] = df['debt_to_capital_employed']
+
         
         # Enhanced default probability with stability fixes
         X['default_prob'] = [black_cox_pod(V, B, mu=0.05, sigma=0.25, T=1.0) 
