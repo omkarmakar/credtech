@@ -524,7 +524,7 @@ def main():
                     st.plotly_chart(sentiment_fig, use_container_width=True)
             with c2:
                 st.subheader("Recent Headlines")
-                for item in data['news_data'][:5]:
+                for item in data['news_data'][:10]:
                     score = item['sentiment']['compound']
                     color = "🟢" if score > 0.1 else "🔴" if score < -0.1 else "🟡"
                     st.markdown(f'<div class="news-item"><strong>{color} {item.get("title", item.get("headline", "News"))[:60]}</strong><br><small>Sentiment: {score:.2f} | {item.get("published_at", item.get("date", "Recent"))}</small></div>', unsafe_allow_html=True)
