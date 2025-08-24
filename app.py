@@ -529,9 +529,9 @@ def main():
                     color = "🟢" if score > 0.1 else "🔴" if score < -0.1 else "🟡"
                     st.markdown(f'<div class="news-item"><strong>{color} {item.get("title", item.get("headline", "News"))[:60]}</strong><br><small>Sentiment: {score:.2f} | {item.get("published_at", item.get("date", "Recent"))}</small></div>', unsafe_allow_html=True)
 
-        st.header("📊 Feature Vector Weights (Raw Input Importance)")
-        weight_fig = create_feature_vector_weight_chart(data['feature_vector'].T.squeeze())
-        st.plotly_chart(weight_fig, use_container_width=True)
+        # st.header("📊 Feature Vector Weights (Raw Input Importance)")
+        # weight_fig = create_feature_vector_weight_chart(data['feature_vector'].T.squeeze())
+        # st.plotly_chart(weight_fig, use_container_width=True)
 
         # Company fundamentals
         st.header("💼 Company Fundamentals")
